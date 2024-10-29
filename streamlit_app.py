@@ -1,115 +1,78 @@
-import streamlit as st
+# 필요한 라이브러리 불러오기
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from datetime import datetime, timedelta
+import ipywidgets as widgets
+from IPython.display import display
 
-# Streamlit 제목과 설명
-st.title("온도 데이터 분석 대시보드")
-st.markdown("CSV 파일을 업로드하고 원하는 통합국명을 선택해 데이터를 분석하세요.")
+# 데이터 로드 및 날짜 형식 변환
+file_path = "/mnt/data/sqllab_temp_test2.csv"
+data = pd.read_csv(file_path)
+data['날짜'] = pd.to_datetime(data['날짜'])
 
-# 파일 업로드 기능
-uploaded_file = st.file_uploader("CSV 파일을 업로드하세요", type=["csv"])
+# 최근 날짜 계산
+latest_date = data['날짜'].max()
+recent_data = data[data['날짜'] == latest_date]
 
-if uploaded_file is not None:
-    # 데이터 로드 및 날짜 형식 변환
-    data = pd.read_csv(uploaded_file)
-    data['날짜'] = pd.to_datetime(data['날짜'])
+# 통합국명 선택 위젯 생성
+unique_names = data['통합국명'].unique()
+dropdown = widgets.Dropdown(options=unique_names, description='통합국명:')
 
-    # 최신 날짜 및 시간 기준으로 데이터 필터링
-    latest_datetime = data['날짜'].max()
-    one_week_ago = latest_datetime - timedelta(days=7)
+# 최근 1주일 데이터 필터링
+one_week_ago = latest_date - timedelta(days=7)
+one_week_data = data[(data['날짜'] >= one_week_ago) & (data['날짜'] <= latest_date)]
 
-    # 통합국명 선택 드롭다운
-    selected_name = st.selectbox("통합국명을 선택하세요:", data['통합국명'].unique())
-
-    # 선택한 통합국명 데이터 필터링
+def generate_summary(selected_name):
+    # 선택된 통합국명 데이터 필터링
     filtered_data = data[data['통합국명'] == selected_name]
-    recent_data = filtered_data[filtered_data['날짜'] == latest_datetime]
-    week_data = filtered_data[(filtered_data['날짜'] >= one_week_ago) & (filtered_data['날짜'] <= latest_datetime)]
+    recent_filtered_data = recent_data[recent_data['통합국명'] == selected_name]
+    week_filtered_data = one_week_data[one_week_data['통합국명'] == selected_name]
 
-    # CSV 다운로드 버튼 (파일 업로드 아래에 위치)
-    st.subheader(f"{selected_name} 데이터 다운로드")
-    csv = filtered_data.to_csv(index=False).encode('utf-8')
-    st.download_button(
-        label="CSV 파일 다운로드",
-        data=csv,
-        file_name=f"{selected_name}_data.csv",
-        mime='text/csv',
-    )
+    # 1. 최근 온도의 모듈별 히트맵
+    heatmap_data = recent_filtered_data.pivot_table(values='온도', index='모듈번호', columns='hh', aggfunc=np.mean)
 
-    # 1. 최신 온도의 모듈별 표 생성
-    st.subheader(f"{selected_name} - 최신 온도 모듈별 표")
-    if not recent_data.empty:
-        module_table = recent_data[['모듈번호', '온도']].groupby('모듈번호').mean()
-        st.dataframe(module_table)
-    else:
-        st.warning(f"{selected_name}에 대한 최신 데이터가 없습니다.")
+    plt.figure(figsize=(12, 6))
+    sns.heatmap(heatmap_data, annot=True, cmap='coolwarm', fmt=".1f", cbar=True)
+    plt.title(f'{selected_name} 모듈별 시간대 평균 온도 히트맵')
+    plt.xlabel('시간 (시)')
+    plt.ylabel('모듈번호')
+    plt.show()
 
-    # 2. 최근 1주일 평균 온도 표 생성
-    st.subheader("최근 1주일 평균 온도")
-    if not week_data.empty:
-        daily_avg = week_data.groupby(week_data['날짜'].dt.date)['온도'].mean()
-        overall_avg = week_data['온도'].mean()
-        module_avg = week_data.groupby('모듈번호')['온도'].mean()
+    # 2. 최근 1주일 평균 온도 표
+    daily_avg = week_filtered_data.groupby(week_filtered_data['날짜'].dt.date)['온도'].mean()
+    overall_avg = week_filtered_data['온도'].mean()
+    module_avg = week_filtered_data.groupby('모듈번호')['온도'].mean()
 
-        summary_table = pd.DataFrame({
-            '일자': daily_avg.index,
-            '일별 평균 온도': daily_avg.values,
-            '전체 평균 온도': [overall_avg] * len(daily_avg),
-            '모듈별 평균 온도': [module_avg.mean()] * len(daily_avg)
-        })
-        st.dataframe(summary_table)
-    else:
-        st.warning(f"{selected_name}에 대한 최근 1주일 데이터가 없습니다.")
+    summary_table = pd.DataFrame({
+        '일자': daily_avg.index,
+        '일별 평균 온도': daily_avg.values,
+        '전체 평균 온도': [overall_avg] * len(daily_avg),
+        '모듈별 평균 온도': [module_avg.mean()] * len(daily_avg)
+    })
 
     # 3. 최근 1주일 최고/최저 온도 발생일 및 모듈번호
-    st.subheader("최근 1주일 최고/최저 온도")
-    if not week_data.empty:
-        max_temp_data = week_data.loc[week_data['온도'].idxmax()]
-        min_temp_data = week_data.loc[week_data['온도'].idxmin()]
+    max_temp_data = week_filtered_data.loc[week_filtered_data['온도'].idxmax()]
+    min_temp_data = week_filtered_data.loc[week_filtered_data['온도'].idxmin()]
 
-        extreme_temp_table = pd.DataFrame({
-            '구분': ['최고 온도', '최저 온도'],
-            '온도': [max_temp_data['온도'], min_temp_data['온도']],
-            '발생일': [max_temp_data['날짜'].date(), min_temp_data['날짜'].date()],
-            '모듈번호': [max_temp_data['모듈번호'], min_temp_data['모듈번호']]
-        })
-        st.dataframe(extreme_temp_table)
-    else:
-        st.warning(f"{selected_name}에 대한 최고/최저 온도 데이터가 없습니다.")
+    extreme_temp_table = pd.DataFrame({
+        '구분': ['최고 온도', '최저 온도'],
+        '온도': [max_temp_data['온도'], min_temp_data['온도']],
+        '발생일': [max_temp_data['날짜'].date(), min_temp_data['날짜'].date()],
+        '모듈번호': [max_temp_data['모듈번호'], min_temp_data['모듈번호']]
+    })
 
-    # 4. 그래프 옵션 제공
-    st.subheader("그래프 옵션")
-    option = st.selectbox(
-        "보고 싶은 그래프를 선택하세요:",
-        ["24시간 트렌드", "최근 2주 평균 온도", "일단위 최고 온도"]
-    )
+    display(summary_table)
+    display(extreme_temp_table)
 
-    plt.figure(figsize=(10, 6))
+    return filtered_data
 
-    if option == "24시간 트렌드":
-        last_24_hours = filtered_data[filtered_data['날짜'] >= latest_datetime - timedelta(days=1)]
-        plt.plot(last_24_hours['hh'], last_24_hours['온도'], marker='o')
-        plt.title("최근 24시간 트렌드 (시간 기준)")
-        plt.xlabel("시간 (hh)")
-        plt.ylabel("온도 (°C)")
+# 통합국명 선택 시 실행되는 콜백 함수
+def on_select(change):
+    selected_name = change['new']
+    generate_summary(selected_name)
 
-    elif option == "최근 2주 평균 온도":
-        last_2_weeks = filtered_data[filtered_data['날짜'] >= latest_datetime - timedelta(days=14)]
-        daily_avg = last_2_weeks.groupby(last_2_weeks['날짜'].dt.date)['온도'].mean()
-        plt.plot(daily_avg.index, daily_avg.values, marker='o')
-        plt.title("최근 2주 평균 온도")
-        plt.xlabel("날짜 (mm-dd)")
-        plt.ylabel("온도 (°C)")
-        plt.xticks(rotation=45)
-
-    elif option == "일단위 최고 온도":
-        daily_max = filtered_data.groupby(filtered_data['날짜'].dt.date)['온도'].max()
-        plt.plot(daily_max.index, daily_max.values, marker='o')
-        plt.title("일단위 최고 온도")
-        plt.xlabel("날짜 (mm-dd)")
-        plt.ylabel("온도 (°C)")
-        plt.xticks(rotation=45)
-
-    st.pyplot(plt)
+# 이벤트 리스너 설정
+dropdown.observe(on_select, names='value')
+display(dropdown)
