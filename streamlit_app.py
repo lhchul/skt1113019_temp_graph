@@ -31,39 +31,48 @@ if uploaded_file is not None:
 
     # 1. 최신 온도의 모듈별 히트맵 생성
     st.subheader(f"{selected_name} - 최신 온도 모듈별 히트맵")
-    heatmap_data = recent_data.pivot_table(values='온도', index='모듈번호', columns='hh', aggfunc=np.mean)
+    if not recent_data.empty:
+        heatmap_data = recent_data.pivot_table(values='온도', index='모듈번호', columns='hh', aggfunc=np.mean)
 
-    plt.figure(figsize=(12, 6))
-    sns.heatmap(heatmap_data, annot=True, cmap='coolwarm', fmt=".1f", cbar=True)
-    plt.title(f'{selected_name} 모듈별 시간대 평균 온도 히트맵')
-    st.pyplot(plt)
+        plt.figure(figsize=(12, 6))
+        sns.heatmap(heatmap_data, annot=True, cmap='coolwarm', fmt=".1f", cbar=True)
+        plt.title(f'{selected_name} 모듈별 시간대 평균 온도 히트맵')
+        st.pyplot(plt)
+    else:
+        st.warning(f"{selected_name}에 대한 최신 데이터가 없습니다.")
 
     # 2. 최근 1주일 평균 온도 계산 및 표 생성
     st.subheader("최근 1주일 평균 온도")
-    daily_avg = week_data.groupby(week_data['날짜'].dt.date)['온도'].mean()
-    overall_avg = week_data['온도'].mean()
-    module_avg = week_data.groupby('모듈번호')['온도'].mean()
+    if not week_data.empty:
+        daily_avg = week_data.groupby(week_data['날짜'].dt.date)['온도'].mean()
+        overall_avg = week_data['온도'].mean()
+        module_avg = week_data.groupby('모듈번호')['온도'].mean()
 
-    summary_table = pd.DataFrame({
-        '일자': daily_avg.index,
-        '일별 평균 온도': daily_avg.values,
-        '전체 평균 온도': [overall_avg] * len(daily_avg),
-        '모듈별 평균 온도': [module_avg.mean()] * len(daily_avg)
-    })
-    st.dataframe(summary_table)
+        summary_table = pd.DataFrame({
+            '일자': daily_avg.index,
+            '일별 평균 온도': daily_avg.values,
+            '전체 평균 온도': [overall_avg] * len(daily_avg),
+            '모듈별 평균 온도': [module_avg.mean()] * len(daily_avg)
+        })
+        st.dataframe(summary_table)
+    else:
+        st.warning(f"{selected_name}에 대한 최근 1주일 데이터가 없습니다.")
 
     # 3. 최근 1주일 최고/최저 온도 발생일 및 모듈번호
     st.subheader("최근 1주일 최고/최저 온도")
-    max_temp_data = week_data.loc[week_data['온도'].idxmax()]
-    min_temp_data = week_data.loc[week_data['온도'].idxmin()]
+    if not week_data.empty:
+        max_temp_data = week_data.loc[week_data['온도'].idxmax()]
+        min_temp_data = week_data.loc[week_data['온도'].idxmin()]
 
-    extreme_temp_table = pd.DataFrame({
-        '구분': ['최고 온도', '최저 온도'],
-        '온도': [max_temp_data['온도'], min_temp_data['온도']],
-        '발생일': [max_temp_data['날짜'].date(), min_temp_data['날짜'].date()],
-        '모듈번호': [max_temp_data['모듈번호'], min_temp_data['모듈번호']]
-    })
-    st.dataframe(extreme_temp_table)
+        extreme_temp_table = pd.DataFrame({
+            '구분': ['최고 온도', '최저 온도'],
+            '온도': [max_temp_data['온도'], min_temp_data['온도']],
+            '발생일': [max_temp_data['날짜'].date(), min_temp_data['날짜'].date()],
+            '모듈번호': [max_temp_data['모듈번호'], min_temp_data['모듈번호']]
+        })
+        st.dataframe(extreme_temp_table)
+    else:
+        st.warning(f"{selected_name}에 대한 최고/최저 온도 데이터가 없습니다.")
 
     # 4. CSV 다운로드 버튼 추가
     st.subheader(f"{selected_name} 데이터 다운로드")
