@@ -28,6 +28,16 @@ if uploaded_file is not None:
     recent_data = filtered_data[filtered_data['날짜'] == latest_date]
     week_data = filtered_data[(filtered_data['날짜'] >= one_week_ago) & (filtered_data['날짜'] <= latest_date)]
 
+    # CSV 다운로드 버튼 (파일 업로드 바로 아래에 위치)
+    st.subheader(f"{selected_name} 데이터 다운로드")
+    csv = filtered_data.to_csv(index=False).encode('utf-8')
+    st.download_button(
+        label="CSV 파일 다운로드",
+        data=csv,
+        file_name=f"{selected_name}_data.csv",
+        mime='text/csv',
+    )
+
     # 1. 최신 온도의 모듈별 표 생성
     st.subheader(f"{selected_name} - 최신 온도 모듈별 표")
     if not recent_data.empty:
@@ -77,32 +87,31 @@ if uploaded_file is not None:
     )
 
     plt.figure(figsize=(10, 6))
+
+    # 세로축에 날짜를 mm-dd 형식으로 표시
+    def format_date(data):
+        return data['날짜'].dt.strftime('%m-%d')
+
     if option == "전체 데이터 보기":
-        plt.plot(filtered_data['dt'], filtered_data['온도'])
+        plt.plot(format_date(filtered_data), filtered_data['온도'], marker='o')
         plt.title("전체 데이터")
+
     elif option == "최근 24시간 평균 온도":
         last_24_hours = filtered_data[filtered_data['날짜'] >= latest_date - timedelta(days=1)]
-        plt.plot(last_24_hours['dt'], last_24_hours['온도'])
+        plt.plot(format_date(last_24_hours), last_24_hours['온도'], marker='o')
         plt.title("최근 24시간 평균 온도")
+
     elif option == "2주 평균 온도":
         last_2_weeks = filtered_data[filtered_data['날짜'] >= latest_date - timedelta(days=14)]
-        plt.plot(last_2_weeks['dt'], last_2_weeks['온도'])
+        plt.plot(format_date(last_2_weeks), last_2_weeks['온도'], marker='o')
         plt.title("2주 평균 온도")
+
     elif option == "일단위 최고 온도":
         daily_max = filtered_data.groupby(filtered_data['날짜'].dt.date)['온도'].max()
-        plt.plot(daily_max.index, daily_max.values)
+        plt.plot(daily_max.index.strftime('%m-%d'), daily_max.values, marker='o')
         plt.title("일단위 최고 온도")
 
-    plt.xlabel("dt")
+    plt.xlabel("날짜 (mm-dd)")
     plt.ylabel("온도 (°C)")
+    plt.xticks(rotation=45)  # 날짜 축 레이블 회전
     st.pyplot(plt)
-
-    # 5. CSV 다운로드 버튼
-    st.subheader(f"{selected_name} 데이터 다운로드")
-    csv = filtered_data.to_csv(index=False).encode('utf-8')
-    st.download_button(
-        label="CSV 파일 다운로드",
-        data=csv,
-        file_name=f"{selected_name}_data.csv",
-        mime='text/csv',
-    )
