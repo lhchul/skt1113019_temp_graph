@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from datetime import datetime, timedelta
@@ -13,7 +12,7 @@ st.markdown("CSV 파일을 업로드하고 원하는 통합국명을 선택해 �
 uploaded_file = st.file_uploader("CSV 파일을 업로드하세요", type=["csv"])
 
 if uploaded_file is not None:
-    # 파일을 읽어와 데이터프레임으로 변환
+    # 데이터 로드 및 날짜 형식 변환
     data = pd.read_csv(uploaded_file)
     data['날짜'] = pd.to_datetime(data['날짜'])
 
@@ -29,19 +28,15 @@ if uploaded_file is not None:
     recent_data = filtered_data[filtered_data['날짜'] == latest_date]
     week_data = filtered_data[(filtered_data['날짜'] >= one_week_ago) & (filtered_data['날짜'] <= latest_date)]
 
-    # 1. 최신 온도의 모듈별 히트맵 생성
-    st.subheader(f"{selected_name} - 최신 온도 모듈별 히트맵")
+    # 1. 최신 온도의 모듈별 표 생성
+    st.subheader(f"{selected_name} - 최신 온도 모듈별 표")
     if not recent_data.empty:
-        heatmap_data = recent_data.pivot_table(values='온도', index='모듈번호', columns='hh', aggfunc=np.mean)
-
-        plt.figure(figsize=(12, 6))
-        sns.heatmap(heatmap_data, annot=True, cmap='coolwarm', fmt=".1f", cbar=True)
-        plt.title(f'{selected_name} 모듈별 시간대 평균 온도 히트맵')
-        st.pyplot(plt)
+        module_table = recent_data[['모듈번호', '온도']].groupby('모듈번호').mean()
+        st.dataframe(module_table)
     else:
         st.warning(f"{selected_name}에 대한 최신 데이터가 없습니다.")
 
-    # 2. 최근 1주일 평균 온도 계산 및 표 생성
+    # 2. 최근 1주일 평균 온도 표 생성
     st.subheader("최근 1주일 평균 온도")
     if not week_data.empty:
         daily_avg = week_data.groupby(week_data['날짜'].dt.date)['온도'].mean()
@@ -74,7 +69,35 @@ if uploaded_file is not None:
     else:
         st.warning(f"{selected_name}에 대한 최고/최저 온도 데이터가 없습니다.")
 
-    # 4. CSV 다운로드 버튼 추가
+    # 4. 그래프 옵션 제공
+    st.subheader("그래프 옵션")
+    option = st.selectbox(
+        "보고 싶은 그래프를 선택하세요:",
+        ["전체 데이터 보기", "최근 24시간 평균 온도", "2주 평균 온도", "일단위 최고 온도"]
+    )
+
+    plt.figure(figsize=(10, 6))
+    if option == "전체 데이터 보기":
+        plt.plot(filtered_data['dt'], filtered_data['온도'])
+        plt.title("전체 데이터")
+    elif option == "최근 24시간 평균 온도":
+        last_24_hours = filtered_data[filtered_data['날짜'] >= latest_date - timedelta(days=1)]
+        plt.plot(last_24_hours['dt'], last_24_hours['온도'])
+        plt.title("최근 24시간 평균 온도")
+    elif option == "2주 평균 온도":
+        last_2_weeks = filtered_data[filtered_data['날짜'] >= latest_date - timedelta(days=14)]
+        plt.plot(last_2_weeks['dt'], last_2_weeks['온도'])
+        plt.title("2주 평균 온도")
+    elif option == "일단위 최고 온도":
+        daily_max = filtered_data.groupby(filtered_data['날짜'].dt.date)['온도'].max()
+        plt.plot(daily_max.index, daily_max.values)
+        plt.title("일단위 최고 온도")
+
+    plt.xlabel("dt")
+    plt.ylabel("온도 (°C)")
+    st.pyplot(plt)
+
+    # 5. CSV 다운로드 버튼
     st.subheader(f"{selected_name} 데이터 다운로드")
     csv = filtered_data.to_csv(index=False).encode('utf-8')
     st.download_button(
@@ -83,26 +106,3 @@ if uploaded_file is not None:
         file_name=f"{selected_name}_data.csv",
         mime='text/csv',
     )
-
-    # 5. 추가 그래프: 전체 데이터와 선택된 기간의 온도 그래프
-    st.subheader("추가 그래프 옵션")
-    option = st.selectbox(
-        "보고 싶은 그래프를 선택하세요:",
-        ["전체 데이터 보기", "최근 24시간 평균 온도", "2주 평균 온도", "일단위 최고 온도"]
-    )
-
-    if option == "전체 데이터 보기":
-        st.line_chart(filtered_data.set_index('날짜')['온도'])
-
-    elif option == "최근 24시간 평균 온도":
-        last_24_hours = filtered_data[filtered_data['날짜'] >= latest_date - timedelta(days=1)]
-        st.line_chart(last_24_hours.set_index('날짜')['온도'])
-
-    elif option == "2주 평균 온도":
-        last_2_weeks = filtered_data[filtered_data['날짜'] >= latest_date - timedelta(days=14)]
-        weekly_avg = last_2_weeks.resample('D', on='날짜')['온도'].mean()
-        st.line_chart(weekly_avg)
-
-    elif option == "일단위 최고 온도":
-        daily_max = filtered_data.resample('D', on='날짜')['온도'].max()
-        st.line_chart(daily_max)
