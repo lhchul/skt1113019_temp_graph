@@ -16,19 +16,19 @@ if uploaded_file is not None:
     data = pd.read_csv(uploaded_file)
     data['날짜'] = pd.to_datetime(data['날짜'])
 
-    # 최신 날짜 및 1주일 데이터 계산
-    latest_date = data['날짜'].max()
-    one_week_ago = latest_date - timedelta(days=7)
+    # 최신 날짜 및 시간 기준으로 데이터 필터링
+    latest_datetime = data['날짜'].max()
+    one_week_ago = latest_datetime - timedelta(days=7)
 
     # 통합국명 선택 드롭다운
     selected_name = st.selectbox("통합국명을 선택하세요:", data['통합국명'].unique())
 
     # 선택한 통합국명 데이터 필터링
     filtered_data = data[data['통합국명'] == selected_name]
-    recent_data = filtered_data[filtered_data['날짜'] == latest_date]
-    week_data = filtered_data[(filtered_data['날짜'] >= one_week_ago) & (filtered_data['날짜'] <= latest_date)]
+    recent_data = filtered_data[filtered_data['날짜'] == latest_datetime]
+    week_data = filtered_data[(filtered_data['날짜'] >= one_week_ago) & (filtered_data['날짜'] <= latest_datetime)]
 
-    # CSV 다운로드 버튼 (파일 업로드 바로 아래에 위치)
+    # CSV 다운로드 버튼 (파일 업로드 아래에 위치)
     st.subheader(f"{selected_name} 데이터 다운로드")
     csv = filtered_data.to_csv(index=False).encode('utf-8')
     st.download_button(
@@ -83,35 +83,33 @@ if uploaded_file is not None:
     st.subheader("그래프 옵션")
     option = st.selectbox(
         "보고 싶은 그래프를 선택하세요:",
-        ["전체 데이터 보기", "최근 24시간 평균 온도", "2주 평균 온도", "일단위 최고 온도"]
+        ["24시간 트렌드", "최근 2주 평균 온도", "일단위 최고 온도"]
     )
 
     plt.figure(figsize=(10, 6))
 
-    # 세로축에 날짜를 mm-dd 형식으로 표시
-    def format_date(data):
-        return data['날짜'].dt.strftime('%m-%d')
+    if option == "24시간 트렌드":
+        last_24_hours = filtered_data[filtered_data['날짜'] >= latest_datetime - timedelta(days=1)]
+        plt.plot(last_24_hours['hh'], last_24_hours['온도'], marker='o')
+        plt.title("최근 24시간 트렌드 (시간 기준)")
+        plt.xlabel("시간 (hh)")
+        plt.ylabel("온도 (°C)")
 
-    if option == "전체 데이터 보기":
-        plt.plot(format_date(filtered_data), filtered_data['온도'], marker='o')
-        plt.title("전체 데이터")
-
-    elif option == "최근 24시간 평균 온도":
-        last_24_hours = filtered_data[filtered_data['날짜'] >= latest_date - timedelta(days=1)]
-        plt.plot(format_date(last_24_hours), last_24_hours['온도'], marker='o')
-        plt.title("최근 24시간 평균 온도")
-
-    elif option == "2주 평균 온도":
-        last_2_weeks = filtered_data[filtered_data['날짜'] >= latest_date - timedelta(days=14)]
-        plt.plot(format_date(last_2_weeks), last_2_weeks['온도'], marker='o')
-        plt.title("2주 평균 온도")
+    elif option == "최근 2주 평균 온도":
+        last_2_weeks = filtered_data[filtered_data['날짜'] >= latest_datetime - timedelta(days=14)]
+        daily_avg = last_2_weeks.groupby(last_2_weeks['날짜'].dt.date)['온도'].mean()
+        plt.plot(daily_avg.index, daily_avg.values, marker='o')
+        plt.title("최근 2주 평균 온도")
+        plt.xlabel("날짜 (mm-dd)")
+        plt.ylabel("온도 (°C)")
+        plt.xticks(rotation=45)
 
     elif option == "일단위 최고 온도":
         daily_max = filtered_data.groupby(filtered_data['날짜'].dt.date)['온도'].max()
-        plt.plot(daily_max.index.strftime('%m-%d'), daily_max.values, marker='o')
+        plt.plot(daily_max.index, daily_max.values, marker='o')
         plt.title("일단위 최고 온도")
+        plt.xlabel("날짜 (mm-dd)")
+        plt.ylabel("온도 (°C)")
+        plt.xticks(rotation=45)
 
-    plt.xlabel("날짜 (mm-dd)")
-    plt.ylabel("온도 (°C)")
-    plt.xticks(rotation=45)  # 날짜 축 레이블 회전
     st.pyplot(plt)
